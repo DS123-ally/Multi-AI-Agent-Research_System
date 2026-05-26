@@ -1,7 +1,0 @@
-[server]
-# Avoid reruns from heavy optional packages (transformers/torch) in the venv
-fileWatcherType = "none"
-headless = true
-
-[runner]
-fastReruns = false
