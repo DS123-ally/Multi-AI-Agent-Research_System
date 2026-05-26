@@ -2,15 +2,14 @@ import streamlit as st
 import time
 from agents import (
     AGENT_CONFIG,
-    MAX_REPORT_CHARS,
-    MAX_RESEARCH_CHARS,
     STEP_COOLDOWN_SEC,
     build_reader_agent,
     build_search_agent,
     writer_chain,
     critic_chain,
+    truncate_by_tokens,
 )
-from groq_utils import invoke_with_retry
+from groq_utils import invoke_with_retry, stream_with_retry
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -489,14 +488,16 @@ if st.session_state.running and not st.session_state.done:
 
         elif step == 2:
             st.info("Step 3/4 — Writer is drafting the report…")
-            with st.spinner("✍️  Writer is drafting the report…"):
-                research_combined = (
-                    f"SEARCH RESULTS:\n{results['search']}\n\n"
-                    f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
-                )[:MAX_RESEARCH_CHARS]
-                results["writer"] = invoke_with_retry(
-                    lambda: writer_chain.invoke(
-                        {"topic": topic_val, "research": research_combined}
+            research_combined = truncate_by_tokens(
+                f"SEARCH RESULTS:\n{results['search']}\n\n"
+                f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
+            )
+            with st.expander("✍️  Writer is drafting the report (Live)…", expanded=True):
+                results["writer"] = st.write_stream(
+                    stream_with_retry(
+                        lambda: writer_chain.stream(
+                            {"topic": topic_val, "research": research_combined}
+                        )
                     )
                 )
             st.session_state.results = results
@@ -505,10 +506,12 @@ if st.session_state.running and not st.session_state.done:
 
         elif step == 3:
             st.info("Step 4/4 — Critic is reviewing the report…")
-            with st.spinner("🧐  Critic is reviewing the report…"):
-                report_for_critic = results["writer"][:MAX_REPORT_CHARS]
-                results["critic"] = invoke_with_retry(
-                    lambda: critic_chain.invoke({"report": report_for_critic})
+            report_for_critic = truncate_by_tokens(results["writer"])
+            with st.expander("🧐  Critic is reviewing the report (Live)…", expanded=True):
+                results["critic"] = st.write_stream(
+                    stream_with_retry(
+                        lambda: critic_chain.stream({"report": report_for_critic})
+                    )
                 )
             st.session_state.results = results
             st.session_state.running = False

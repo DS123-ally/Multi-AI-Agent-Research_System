@@ -1,6 +1,6 @@
 from langchain.tools import tool
 from bs4 import BeautifulSoup
-import requests
+from playwright.sync_api import sync_playwright
 from tavily import TavilyClient
 import sys
 import os
@@ -66,34 +66,26 @@ def scrape_url(url: str) -> str:
     """
 
     try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            )
+            page = context.new_page()
+            
+            # Navigate and wait for network idle to ensure JS loads
+            page.goto(url, timeout=15000, wait_until="networkidle")
+            html_content = page.content()
+            browser.close()
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Connection": "keep-alive"
-        }
-
-        resp = requests.get(
-            url,
-            headers=headers,
-            timeout=15
-        )
-
-        soup = BeautifulSoup(
-            resp.text,
-            "html.parser"
-        )
+        soup = BeautifulSoup(html_content, "html.parser")
        
         for tag in soup(["script", "style", "nav", "footer"]):
             tag.decompose()
 
-        text = soup.get_text(
-            separator=" ",
-            strip=True
-        )
+        text = soup.get_text(separator=" ", strip=True)
 
-        return text[:2000]
+        return text
 
     except Exception as e:
         return f"Could not scrape the URL: {str(e)}"

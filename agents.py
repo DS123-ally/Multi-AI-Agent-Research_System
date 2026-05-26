@@ -14,12 +14,21 @@ llm = ChatGroq(
     max_tokens=1024,
 )
 
+import tiktoken
+
 AGENT_CONFIG = {"recursion_limit": 10}
 
 # Keep downstream prompts within Groq free-tier TPM (~6000/min)
-MAX_RESEARCH_CHARS = 2500
-MAX_REPORT_CHARS = 3500
+MAX_CONTEXT_TOKENS = 6000
 STEP_COOLDOWN_SEC = 3
+
+def truncate_by_tokens(text: str, max_tokens: int = MAX_CONTEXT_TOKENS) -> str:
+    """Truncate text to ensure it stays within token limits."""
+    encoding = tiktoken.get_encoding("cl100k_base")
+    tokens = encoding.encode(text)
+    if len(tokens) > max_tokens:
+        return encoding.decode(tokens[:max_tokens])
+    return text
 
 def build_search_agent():
     return create_agent(
